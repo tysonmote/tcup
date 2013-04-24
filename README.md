@@ -11,7 +11,7 @@ configured to expect a `X-Token` header for simple authentication.
       -in="127.0.0.1:1984": TCP listening address
       -out="127.0.0.1:1984": UDP destination address
       -token="": Expected "X-Token" header for all requests
-      -log=0: Log basic requests stats every few seconds. 0 will cause no stats to be logged
+      -log=0: Stats logging interval. A value of 0 will cause no stats to be logged
 
 tcup returns the following status codes:
 
