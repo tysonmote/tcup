@@ -8,18 +8,20 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
 
 var (
 	// Command-line flags
-	out   = flag.String("out", "127.0.0.1:8125", "UDP destination address")
-	in    = flag.String("in", "127.0.0.1:8125", "TCP listening address")
-	token = flag.String("token", "", "Expected \"X-Token\" header for all requests")
-	cert  = flag.String("cert", "cert.pem", "Path to SSL certificate file")
-	key   = flag.String("key", "key.pem", "Path to SSL key file")
-	help  = flag.Bool("help", false, "Print usage info")
+	in          = flag.String("in", "127.0.0.1:8125", "TCP listening address")
+	out         = flag.String("out", "127.0.0.1:8125", "UDP destination address")
+	token       = flag.String("token", "", "Expected \"X-Token\" header for all requests")
+	cert        = flag.String("cert", "cert.pem", "Path to SSL certificate file")
+	key         = flag.String("key", "key.pem", "Path to SSL key file")
+	logInterval = flag.Int("log", 0, "Stats logging interval. A value of 0 will cause no stats to be logged")
+	help        = flag.Bool("help", false, "Print usage info")
 
 	// Stdout logging
 	logger *log.Logger
@@ -29,8 +31,9 @@ var (
 	destConn  net.Conn
 
 	// Stats
-	requestsReceived int
-	bytesReceived    int
+	requestsReceived uint64
+	bytesReceived    uint64
+	totalRequestTime float64
 )
 
 // Print usage information and exit.
@@ -42,12 +45,18 @@ func usage() {
 
 // Log stats to the logger and reset them.
 func logStats() {
-	logger.Printf("Received %d bytes, %d requests\n", bytesReceived, requestsReceived)
+	if requestsReceived > 0 {
+		avgRequestMs := strconv.FormatFloat(totalRequestTime/float64(requestsReceived), 'f', 3, 64)
+		logger.Printf("%d requests, %d bytes received (avg. %sms)\n", requestsReceived, bytesReceived, avgRequestMs)
+	}
 	requestsReceived = 0
 	bytesReceived = 0
+	totalRequestTime = 0.0
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
 	if r.Header.Get("X-Token") != *token {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
@@ -64,18 +73,19 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update stats
-	bytesReceived += len(body)
-	requestsReceived += 1
-
 	writeLock.Lock()
-	_, err = destConn.Write(body)
-	writeLock.Unlock()
+	defer writeLock.Unlock()
 
+	_, err = destConn.Write(body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Update stats
+	bytesReceived += uint64(len(body))
+	requestsReceived += 1
+	totalRequestTime += float64(time.Since(start).Nanoseconds()) / float64(time.Millisecond)
 }
 
 func main() {
@@ -98,13 +108,15 @@ func main() {
 		panic(err)
 	}
 
-	// Record stats every minute
+	// Log stats to the logger, if needed
 	go func() {
-		statsTicker := time.NewTicker(time.Minute)
-		for {
-			select {
-			case <-statsTicker.C:
-				logStats()
+		if *logInterval > 0 {
+			statsTicker := time.NewTicker(time.Duration(*logInterval) * time.Second)
+			for {
+				select {
+				case <-statsTicker.C:
+					logStats()
+				}
 			}
 		}
 	}()
