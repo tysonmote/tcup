@@ -4,6 +4,9 @@ tcup
 tcup is an HTTPS server that forwards data to a UDP address. tcup can be
 configured to expect a `X-Token` header for simple authentication.
 
+Think of it as netcat, except from TCP (via HTTPS) to UDP and with token
+authentication.
+
     Usage: ./tcup [flags]
       -help=false: Print usage info
       -cert="cert.pem": Path to SSL certificate file
@@ -16,7 +19,6 @@ configured to expect a `X-Token` header for simple authentication.
 tcup returns the following status codes:
 
 * 200: Request successfully forwarded.
-* 400: Empty request body.
 * 401: Incorrect X-Token header given.
 * 500: There was an error reading the request body or sending it to the
   destination UDP address. Check the response body for an error message.

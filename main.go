@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -28,7 +28,7 @@ var (
 
 	// Statsd connection
 	writeLock sync.Mutex
-	destConn  net.Conn
+	outConn   net.Conn
 
 	// Stats
 	requestsReceived uint64
@@ -38,7 +38,7 @@ var (
 
 // Print usage information and exit.
 func usage() {
-	fmt.Printf("Usage: %s [flags]\n", os.Args[0])
+	fmt.Printf("Usage: tcup [flags]\n")
 	flag.PrintDefaults()
 	os.Exit(2)
 }
@@ -62,28 +62,17 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if len(body) == 0 {
-		http.Error(w, "Empty payload", http.StatusBadRequest)
-		return
-	}
-
 	writeLock.Lock()
 	defer writeLock.Unlock()
 
-	_, err = destConn.Write(body)
+	bytes, err := io.Copy(io.Writer(outConn), io.Reader(r.Body))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Update stats
-	bytesReceived += uint64(len(body))
+	bytesReceived += uint64(bytes)
 	requestsReceived += 1
 	totalRequestTime += float64(time.Since(start).Nanoseconds()) / float64(time.Millisecond)
 }
@@ -99,11 +88,11 @@ func main() {
 	}
 
 	// Setup logger
-	loggerPrefix := fmt.Sprintf("%s[%d] ", os.Args[0], os.Getpid())
+	loggerPrefix := fmt.Sprintf("tcup[%d] ", os.Getpid())
 	logger = log.New(os.Stdout, loggerPrefix, log.LstdFlags)
 
 	// Set up UDP connection
-	destConn, err = net.DialTimeout("udp", *out, time.Second)
+	outConn, err = net.DialTimeout("udp", *out, time.Second)
 	if err != nil {
 		panic(err)
 	}
