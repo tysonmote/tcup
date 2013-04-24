@@ -14,8 +14,8 @@ import (
 
 var (
 	// Command-line flags
-	out   = flag.String("out", "127.0.0.1:1984", "UDP destination address")
-	in    = flag.String("in", "127.0.0.1:1984", "TCP listening address")
+	out   = flag.String("out", "127.0.0.1:8125", "UDP destination address")
+	in    = flag.String("in", "127.0.0.1:8125", "TCP listening address")
 	token = flag.String("token", "", "Expected \"X-Token\" header for all requests")
 	cert  = flag.String("cert", "cert.pem", "Path to SSL certificate file")
 	key   = flag.String("key", "key.pem", "Path to SSL key file")
